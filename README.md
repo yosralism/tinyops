@@ -30,3 +30,17 @@ An on-prem, Python Network Management System for large ISPs. Tinyops focuses on 
 3. **Run tests and linting (placeholders for now)**
    pytest
    ruff check .
+   
+## Running the API locally
+
+With your virtual environment active:
+
+```bash
+uvicorn app.api.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+or
+
+```bash
+./scripts/run_api.sh
+```
