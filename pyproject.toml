@@ -21,7 +21,7 @@ dependencies = [
   "netmiko",
   "nornir>=3.0",
   "paramiko",
-  "asyncssh"
+  "asyncssh",
   "pysnmp",
   "textfsm",
   "ttp",

@@ -4,6 +4,8 @@ pydantic>=2.0
 celery
 redis
 sqlalchemy
+alembic
+greenlet
 asyncpg
 psycopg2-binary
 netmiko
@@ -15,3 +17,4 @@ textfsm
 ttp
 boto3
 python-dotenv
+pydantic-settings

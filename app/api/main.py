@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 
 from app.core.config import get_settings
+from app.api.routes import devices
 
 settings = get_settings()
 
@@ -15,3 +16,6 @@ async def health_check():
         "version": settings.app_version,
         "environment": settings.environment,
     }
+
+
+app.include_router(devices.router, prefix="/api")
