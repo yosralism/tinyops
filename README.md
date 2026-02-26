@@ -1,18 +1,32 @@
-tinyops
+# tinyops
 
-An on-prem, Python-first Network Management System for large ISPs. Tinyops NMS focuses on reliable data collection from thousands of routers via SSH, Telnet, and SNMP, parsing outputs into structured data, and providing extensible workflows for inventory, notifications, and future AI-driven insights.
+An on-prem, Python Network Management System for large ISPs. Tinyops focuses on reliable data collection from thousands of routers via SSH, Telnet, and SNMP, parsing outputs into structured data, and providing extensible workflows for inventory, notifications, and future AI-driven insights.
 
+## Key Goals
+- Reliable multi-protocol collectors with bastion/jump support.
+- Scheduled and ad-hoc job orchestration with isolated execution.
+- Parser pipeline producing structured facts and raw artifacts.
+- Secure user sessions, RBAC, and integrations (Telegram, email, Webex, SNMP traps).
+- Observability, CI/CD, documentation, and future topology/RAG capabilities.
 
-Key Goals
+## Getting Started
+1. Clone the repo.
+2. Create and activate a virtual environment.
+3. Install dependencies (see Development Setup).
+4. Review `/docs` for architecture details and `/infra` for deployment assets.
 
-Reliable multi-protocol collectors with bastion/jump support.
-Scheduled and ad-hoc job orchestration with isolated execution.
-Parser pipeline producing structured facts and raw artifacts.
-Secure user sessions, RBAC, and integrations (Telegram, email, Webex, SNMP traps).
-Observability, CI/CD, documentation, and future topology/RAG capabilities.
+## Development Setup
 
-Getting Started
+1. **Create and activate a virtual environment**
+   python3 -m venv .venv
+   source .venv/bin/activate
 
-Clone the repo and create a virtual environment.
-Install base dependencies (to be added in requirements/ or pyproject.toml).
-Review /docs for architecture details and /infra for deployment assets.
+2. **Install dependencies**
+   - Using requirements files:
+     pip install -r requirements/dev.txt
+   - If using Poetry:
+     poetry install --with dev
+
+3. **Run tests and linting (placeholders for now)**
+   pytest
+   ruff check .

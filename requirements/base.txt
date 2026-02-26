@@ -1,0 +1,17 @@
+fastapi
+uvicorn[standard]
+pydantic>=2.0
+celery
+redis
+sqlalchemy
+asyncpg
+psycopg2-binary
+netmiko
+nornir>=3.0
+asyncssh
+paramiko
+pysnmp
+textfsm
+ttp
+boto3
+python-dotenv

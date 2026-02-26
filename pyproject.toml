@@ -1,0 +1,54 @@
+[project]
+name = "tinyops"
+version = "0.1.0"
+description = "On-prem Python NMS for large ISP operations."
+authors = [
+  { name = "tinyops", email = "kevin.ysrl@gmail.com" }
+]
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+
+dependencies = [
+  "fastapi",
+  "uvicorn[standard]",
+  "pydantic>=2.0",
+  "celery",
+  "redis",
+  "sqlalchemy",
+  "asyncpg",
+  "psycopg2-binary",
+  "netmiko",
+  "nornir>=3.0",
+  "paramiko",
+  "asyncssh"
+  "pysnmp",
+  "textfsm",
+  "ttp",
+  "boto3",
+  "python-dotenv",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest",
+  "pytest-asyncio",
+  "pytest-cov",
+  "httpx",
+  "mypy",
+  "ruff",
+  "bandit",
+]
+
+[tool.poetry]
+package-mode = false   # remove if packaging app modules
+
+[tool.ruff]
+select = ["E", "F", "B"]
+extend-select = ["I", "N"]
+line-length = 100
+
+[tool.mypy]
+python_version = "3.11"
+warn_unused_ignores = true
+warn_return_any = true
