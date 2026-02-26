@@ -30,7 +30,7 @@ An on-prem, Python Network Management System for large ISPs. Tinyops focuses on 
 3. **Run tests and linting (placeholders for now)**
    pytest
    ruff check .
-   
+
 ## Running the API locally
 
 With your virtual environment active:
@@ -44,3 +44,10 @@ or
 ```bash
 ./scripts/run_api.sh
 ```
+
+### Environment Variables
+
+Copy `.env_sample` to `.env` and adjust for your environment:
+
+```bash
+cp .env_sample .env
