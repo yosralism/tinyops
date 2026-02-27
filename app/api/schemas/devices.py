@@ -23,6 +23,7 @@ class DeviceRead(BaseModel):
     site_id: str | None
     role: str | None
     region: str | None
+    area: str | None
     software_version: str | None
     platform: str | None
     created_at: datetime

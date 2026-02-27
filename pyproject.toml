@@ -35,10 +35,15 @@ dev = [
   "pytest-asyncio",
   "pytest-cov",
   "httpx",
+  "aiosqlite",
   "mypy",
   "ruff",
   "bandit",
 ]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
 
 [tool.poetry]
 package-mode = false   # remove if packaging app modules
