@@ -11,7 +11,6 @@ from app.storage.models import Device
 
 router = APIRouter(tags=["devices"])
 
-
 @router.post("/devices", response_model=DeviceRead, status_code=status.HTTP_201_CREATED)
 async def create_device(
     payload: DeviceCreate,
@@ -21,18 +20,21 @@ async def create_device(
         hostname=payload.hostname,
         mgmt_ip=payload.mgmt_ip,
         vendor=payload.vendor,
-        site=payload.site,
-        tags=payload.tags,
+        site_id=payload.site_id,
+        role=payload.role,
+        region=payload.region,
+        area=payload.area,
+        software_version=payload.software_version,
+        platform=payload.platform,
     )
     db.add(device)
     try:
         await db.commit()
     except IntegrityError:
         await db.rollback()
-        raise HTTPException(status_code=409, detail="Device hostname already exists")
+        raise HTTPException(status_code=409, detail="Device with this hostname or mgmt_ip already exists")
     await db.refresh(device)
     return device
-
 
 @router.get("/devices", response_model=list[DeviceRead])
 async def list_devices(
@@ -43,7 +45,6 @@ async def list_devices(
     stmt = select(Device).order_by(Device.id).limit(limit).offset(offset)
     res = await db.execute(stmt)
     return list(res.scalars().all())
-
 
 @router.get("/devices/{device_id}", response_model=DeviceRead)
 async def get_device(

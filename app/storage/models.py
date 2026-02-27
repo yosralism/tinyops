@@ -1,26 +1,23 @@
 from __future__ import annotations
 
 from datetime import datetime
-
 from sqlalchemy import DateTime, Integer, String, func
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
-
 from app.storage.base import Base
 
 
 class Device(Base):
     __tablename__ = "devices"
-
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-
     hostname: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
-    mgmt_ip: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
-
+    mgmt_ip: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
     vendor: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    site: Mapped[str | None] = mapped_column(String(128), nullable=True)
-
-    tags: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    site_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    role: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    region: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    area: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    software_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    platform: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
