@@ -18,3 +18,5 @@ ttp
 boto3
 python-dotenv
 pydantic-settings
+aiosqlite
+python-multipart

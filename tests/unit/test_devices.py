@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import pytest
 from httpx import AsyncClient
 
@@ -113,3 +114,188 @@ async def test_get_device_not_found_returns_404(client: AsyncClient):
     response = await client.get("/api/devices/99999")
     assert response.status_code == 404
     assert "not found" in response.json().get("detail", "").lower()
+
+
+@pytest.mark.asyncio
+async def test_update_device_returns_200_and_updated_device(client: AsyncClient):
+    create_resp = await client.post(
+        "/api/devices",
+        json={"hostname": "original", "mgmt_ip": "10.0.0.40"},
+    )
+    assert create_resp.status_code == 201
+    device_id = create_resp.json()["id"]
+
+    update_payload = {"hostname": "updated", "vendor": "cisco"}
+    response = await client.put(f"/api/devices/{device_id}", json=update_payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["id"] == device_id
+    assert data["hostname"] == "updated"
+    assert data["mgmt_ip"] == "10.0.0.40"
+    assert data["vendor"] == "cisco"
+
+
+@pytest.mark.asyncio
+async def test_update_device_partial_update(client: AsyncClient):
+    create_resp = await client.post(
+        "/api/devices",
+        json={"hostname": "partial", "mgmt_ip": "10.0.0.50", "vendor": "juniper"},
+    )
+    assert create_resp.status_code == 201
+    device_id = create_resp.json()["id"]
+
+    update_payload = {"role": "edge"}
+    response = await client.put(f"/api/devices/{device_id}", json=update_payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["hostname"] == "partial"
+    assert data["mgmt_ip"] == "10.0.0.50"
+    assert data["vendor"] == "juniper"
+    assert data["role"] == "edge"
+
+
+@pytest.mark.asyncio
+async def test_update_device_not_found_returns_404(client: AsyncClient):
+    response = await client.put(
+        "/api/devices/99999",
+        json={"hostname": "nonexistent"},
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_update_device_duplicate_hostname_returns_409(client: AsyncClient):
+    await client.post("/api/devices", json={"hostname": "first", "mgmt_ip": "10.0.0.60"})
+    create_resp = await client.post(
+        "/api/devices",
+        json={"hostname": "second", "mgmt_ip": "10.0.0.61"},
+    )
+    device_id = create_resp.json()["id"]
+
+    response = await client.put(f"/api/devices/{device_id}", json={"hostname": "first"})
+    assert response.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_delete_device_returns_204(client: AsyncClient):
+    create_resp = await client.post(
+        "/api/devices",
+        json={"hostname": "to-delete", "mgmt_ip": "10.0.0.70"},
+    )
+    assert create_resp.status_code == 201
+    device_id = create_resp.json()["id"]
+
+    response = await client.delete(f"/api/devices/{device_id}")
+    assert response.status_code == 204
+
+    get_response = await client.get(f"/api/devices/{device_id}")
+    assert get_response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_device_not_found_returns_404(client: AsyncClient):
+    response = await client.delete("/api/devices/99999")
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_csv_import_creates_new_devices(client: AsyncClient):
+    csv_content = """hostname,mgmt_ip,vendor,site_id,role,region,area,software_version,platform
+router1,10.0.1.1,cisco,site1,core,us-east,dc1,17.1,ios-xe
+switch1,10.0.1.2,juniper,site1,access,us-east,dc1,21.2,junos
+fw1,10.0.1.3,palo-alto,site2,firewall,us-west,dc2,10.1,panos"""
+    
+    files = {"file": ("devices.csv", io.BytesIO(csv_content.encode()), "text/csv")}
+    response = await client.post("/api/devices/import", files=files)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total_rows"] == 3
+    assert data["created"] == 3
+    assert data["updated"] == 0
+    assert data["skipped"] == 0
+    assert len(data["errors"]) == 0
+
+
+@pytest.mark.asyncio
+async def test_csv_import_updates_existing_devices(client: AsyncClient):
+    await client.post("/api/devices", json={"hostname": "existing", "mgmt_ip": "10.0.2.1"})
+    
+    csv_content = """hostname,mgmt_ip,vendor,site_id,role
+existing,10.0.2.1,cisco,site-updated,core"""
+    
+    files = {"file": ("devices.csv", io.BytesIO(csv_content.encode()), "text/csv")}
+    response = await client.post("/api/devices/import", files=files)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total_rows"] == 1
+    assert data["created"] == 0
+    assert data["updated"] == 1
+    
+    device_resp = await client.get("/api/devices")
+    devices = [d for d in device_resp.json() if d["hostname"] == "existing"]
+    assert len(devices) == 1
+    assert devices[0]["vendor"] == "cisco"
+    assert devices[0]["site_id"] == "site-updated"
+
+
+@pytest.mark.asyncio
+async def test_csv_import_mixed_create_and_update(client: AsyncClient):
+    await client.post("/api/devices", json={"hostname": "old-device", "mgmt_ip": "10.0.3.1"})
+    
+    csv_content = """hostname,mgmt_ip,vendor
+old-device,10.0.3.1,updated-vendor
+new-device,10.0.3.2,new-vendor"""
+    
+    files = {"file": ("devices.csv", io.BytesIO(csv_content.encode()), "text/csv")}
+    response = await client.post("/api/devices/import", files=files)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total_rows"] == 2
+    assert data["created"] == 1
+    assert data["updated"] == 1
+
+
+@pytest.mark.asyncio
+async def test_csv_import_handles_validation_errors(client: AsyncClient):
+    csv_content = """hostname,mgmt_ip,vendor
+valid-device,10.0.4.1,cisco
+,10.0.4.2,juniper
+invalid-device,,palo-alto"""
+    
+    files = {"file": ("devices.csv", io.BytesIO(csv_content.encode()), "text/csv")}
+    response = await client.post("/api/devices/import", files=files)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total_rows"] == 3
+    assert data["created"] == 1
+    assert data["skipped"] == 2
+    assert len(data["errors"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_csv_import_handles_empty_file(client: AsyncClient):
+    csv_content = """hostname,mgmt_ip,vendor"""
+    
+    files = {"file": ("devices.csv", io.BytesIO(csv_content.encode()), "text/csv")}
+    response = await client.post("/api/devices/import", files=files)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total_rows"] == 0
+    assert data["created"] == 0
+
+
+@pytest.mark.asyncio
+async def test_csv_import_reports_duplicate_errors(client: AsyncClient):
+    csv_content = """hostname,mgmt_ip,vendor
+dup-device,10.0.5.1,cisco
+dup-device,10.0.5.2,juniper"""
+    
+    files = {"file": ("devices.csv", io.BytesIO(csv_content.encode()), "text/csv")}
+    response = await client.post("/api/devices/import", files=files)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total_rows"] == 2
+    assert data["created"] == 1
+    assert data["skipped"] == 1
+    assert len(data["errors"]) == 1
+    assert "Duplicate" in data["errors"][0]["error"]

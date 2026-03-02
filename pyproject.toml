@@ -13,6 +13,7 @@ dependencies = [
   "fastapi",
   "uvicorn[standard]",
   "pydantic>=2.0",
+  "python-multipart",
   "celery",
   "redis",
   "sqlalchemy",

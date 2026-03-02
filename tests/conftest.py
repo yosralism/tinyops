@@ -9,8 +9,7 @@ from app.api.main import app
 from app.storage.base import Base
 from app.storage.db import get_db_session
 
-# Import models so Base.metadata has all tables
-from app.storage import models  # noqa: F401
+from app.storage import models
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
