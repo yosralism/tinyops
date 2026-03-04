@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     minio_endpoint: str
     minio_access_key: str
     minio_secret_key: str
+    
+    jwt_secret_key: str
+    jwt_algorithm: str = "HS256"
+    jwt_access_token_expire_minutes: int = 30
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

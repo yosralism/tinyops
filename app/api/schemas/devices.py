@@ -28,6 +28,8 @@ class DeviceUpdate(BaseModel):
 
 
 class DeviceRead(BaseModel):
+    model_config = {"from_attributes": True}
+
     id: int
     hostname: str
     mgmt_ip: str
@@ -40,9 +42,6 @@ class DeviceRead(BaseModel):
     platform: str | None
     created_at: datetime
     updated_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class DeviceImportResult(BaseModel):
