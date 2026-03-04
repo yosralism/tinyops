@@ -50,6 +50,17 @@ async def get_current_active_user(
     return current_user
 
 
+async def require_admin(
+    current_user: User = Depends(get_current_active_user),
+) -> User:
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required"
+        )
+    return current_user
+
+
 @router.post("/auth/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)
 async def register(
     payload: UserCreate,
@@ -60,6 +71,7 @@ async def register(
         username=payload.username,
         email=payload.email,
         hashed_password=hashed_password,
+        role=payload.role,
     )
     db.add(user)
     try:

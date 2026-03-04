@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.schemas.devices import DeviceCreate, DeviceRead, DeviceUpdate, DeviceImportResult
 from app.storage.db import get_db_session
 from app.storage.models import Device, User
-from app.api.routes.auth import get_current_active_user
+from app.api.routes.auth import get_current_active_user, require_admin
 
 router = APIRouter(tags=["devices"])
 
@@ -91,7 +91,7 @@ async def update_device(
 @router.delete("/devices/{device_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_device(
     device_id: int,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> None:
     res = await db.execute(select(Device).where(Device.id == device_id))
@@ -106,7 +106,7 @@ async def delete_device(
 @router.post("/devices/import", response_model=DeviceImportResult)
 async def import_devices_csv(
     file: UploadFile = File(...),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> DeviceImportResult:
     if not file.filename or not file.filename.endswith(".csv"):

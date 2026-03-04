@@ -57,7 +57,8 @@ async def auth_token(client: AsyncClient) -> str:
     register_payload = {
         "username": "testuser",
         "email": "testuser@example.com",
-        "password": "testpassword123"
+        "password": "testpassword123",
+        "role": "operator"
     }
     await client.post("/api/auth/register", json=register_payload)
     
@@ -72,3 +73,26 @@ async def auth_token(client: AsyncClient) -> str:
 @pytest.fixture
 async def auth_headers(auth_token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {auth_token}"}
+
+
+@pytest.fixture
+async def admin_token(client: AsyncClient) -> str:
+    register_payload = {
+        "username": "adminuser",
+        "email": "admin@example.com",
+        "password": "adminpassword123",
+        "role": "admin"
+    }
+    await client.post("/api/auth/register", json=register_payload)
+    
+    login_payload = {
+        "username": "adminuser",
+        "password": "adminpassword123"
+    }
+    response = await client.post("/api/auth/login", json=login_payload)
+    return response.json()["access_token"]
+
+
+@pytest.fixture
+async def admin_headers(admin_token: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {admin_token}"}

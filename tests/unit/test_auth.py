@@ -9,13 +9,15 @@ async def test_register_user_returns_201(client: AsyncClient):
     payload = {
         "username": "testuser",
         "email": "test@example.com",
-        "password": "securepassword123"
+        "password": "securepassword123",
+        "role": "operator"
     }
     response = await client.post("/api/auth/register", json=payload)
     assert response.status_code == 201
     data = response.json()
     assert data["username"] == "testuser"
     assert data["email"] == "test@example.com"
+    assert data["role"] == "operator"
     assert "id" in data
     assert "hashed_password" not in data
 
@@ -64,7 +66,7 @@ async def test_login_with_nonexistent_user_returns_401(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_get_me_with_valid_token_returns_user(client: AsyncClient):
-    register_payload = {"username": "meuser", "email": "me@example.com", "password": "password123"}
+    register_payload = {"username": "meuser", "email": "me@example.com", "password": "password123", "role": "admin"}
     await client.post("/api/auth/register", json=register_payload)
     
     login_response = await client.post("/api/auth/login", json={"username": "meuser", "password": "password123"})
@@ -75,6 +77,20 @@ async def test_get_me_with_valid_token_returns_user(client: AsyncClient):
     data = response.json()
     assert data["username"] == "meuser"
     assert data["email"] == "me@example.com"
+    assert data["role"] == "admin"
+
+
+@pytest.mark.asyncio
+async def test_register_user_defaults_to_operator_role(client: AsyncClient):
+    payload = {
+        "username": "defaultrole",
+        "email": "defaultrole@example.com",
+        "password": "password123"
+    }
+    response = await client.post("/api/auth/register", json=payload)
+    assert response.status_code == 201
+    data = response.json()
+    assert data["role"] == "operator"
 
 
 @pytest.mark.asyncio

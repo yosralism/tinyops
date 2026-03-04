@@ -184,37 +184,51 @@ async def test_update_device_duplicate_hostname_returns_409(client: AsyncClient,
 
 
 @pytest.mark.asyncio
-async def test_delete_device_returns_204(client: AsyncClient, auth_headers: dict[str, str]):
+async def test_delete_device_returns_204(client: AsyncClient, admin_headers: dict[str, str]):
     create_resp = await client.post(
         "/api/devices",
         json={"hostname": "to-delete", "mgmt_ip": "10.0.0.70"},
-        headers=auth_headers
+        headers=admin_headers
     )
     assert create_resp.status_code == 201
     device_id = create_resp.json()["id"]
 
-    response = await client.delete(f"/api/devices/{device_id}", headers=auth_headers)
+    response = await client.delete(f"/api/devices/{device_id}", headers=admin_headers)
     assert response.status_code == 204
 
-    get_response = await client.get(f"/api/devices/{device_id}", headers=auth_headers)
+    get_response = await client.get(f"/api/devices/{device_id}", headers=admin_headers)
     assert get_response.status_code == 404
 
 
 @pytest.mark.asyncio
-async def test_delete_device_not_found_returns_404(client: AsyncClient, auth_headers: dict[str, str]):
-    response = await client.delete("/api/devices/99999", headers=auth_headers)
+async def test_delete_device_not_found_returns_404(client: AsyncClient, admin_headers: dict[str, str]):
+    response = await client.delete("/api/devices/99999", headers=admin_headers)
     assert response.status_code == 404
 
 
 @pytest.mark.asyncio
-async def test_csv_import_creates_new_devices(client: AsyncClient, auth_headers: dict[str, str]):
+async def test_delete_device_requires_admin(client: AsyncClient, auth_headers: dict[str, str], admin_headers: dict[str, str]):
+    create_resp = await client.post(
+        "/api/devices",
+        json={"hostname": "test-delete-perm", "mgmt_ip": "10.0.0.71"},
+        headers=admin_headers
+    )
+    device_id = create_resp.json()["id"]
+    
+    response = await client.delete(f"/api/devices/{device_id}", headers=auth_headers)
+    assert response.status_code == 403
+    assert "Admin access required" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_csv_import_creates_new_devices(client: AsyncClient, admin_headers: dict[str, str]):
     csv_content = """hostname,mgmt_ip,vendor,site_id,role,region,area,software_version,platform
 router1,10.0.1.1,cisco,site1,core,us-east,dc1,17.1,ios-xe
 switch1,10.0.1.2,juniper,site1,access,us-east,dc1,21.2,junos
 fw1,10.0.1.3,palo-alto,site2,firewall,us-west,dc2,10.1,panos"""
     
     files = {"file": ("devices.csv", io.BytesIO(csv_content.encode()), "text/csv")}
-    response = await client.post("/api/devices/import", files=files, headers=auth_headers)
+    response = await client.post("/api/devices/import", files=files, headers=admin_headers)
     assert response.status_code == 200
     data = response.json()
     assert data["total_rows"] == 3
@@ -225,21 +239,21 @@ fw1,10.0.1.3,palo-alto,site2,firewall,us-west,dc2,10.1,panos"""
 
 
 @pytest.mark.asyncio
-async def test_csv_import_updates_existing_devices(client: AsyncClient, auth_headers: dict[str, str]):
-    await client.post("/api/devices", json={"hostname": "existing", "mgmt_ip": "10.0.2.1"}, headers=auth_headers)
+async def test_csv_import_updates_existing_devices(client: AsyncClient, admin_headers: dict[str, str]):
+    await client.post("/api/devices", json={"hostname": "existing", "mgmt_ip": "10.0.2.1"}, headers=admin_headers)
     
     csv_content = """hostname,mgmt_ip,vendor,site_id,role
 existing,10.0.2.1,cisco,site-updated,core"""
     
     files = {"file": ("devices.csv", io.BytesIO(csv_content.encode()), "text/csv")}
-    response = await client.post("/api/devices/import", files=files, headers=auth_headers)
+    response = await client.post("/api/devices/import", files=files, headers=admin_headers)
     assert response.status_code == 200
     data = response.json()
     assert data["total_rows"] == 1
     assert data["created"] == 0
     assert data["updated"] == 1
     
-    device_resp = await client.get("/api/devices", headers=auth_headers)
+    device_resp = await client.get("/api/devices", headers=admin_headers)
     devices = [d for d in device_resp.json() if d["hostname"] == "existing"]
     assert len(devices) == 1
     assert devices[0]["vendor"] == "cisco"
@@ -247,15 +261,15 @@ existing,10.0.2.1,cisco,site-updated,core"""
 
 
 @pytest.mark.asyncio
-async def test_csv_import_mixed_create_and_update(client: AsyncClient, auth_headers: dict[str, str]):
-    await client.post("/api/devices", json={"hostname": "old-device", "mgmt_ip": "10.0.3.1"}, headers=auth_headers)
+async def test_csv_import_mixed_create_and_update(client: AsyncClient, admin_headers: dict[str, str]):
+    await client.post("/api/devices", json={"hostname": "old-device", "mgmt_ip": "10.0.3.1"}, headers=admin_headers)
     
     csv_content = """hostname,mgmt_ip,vendor
 old-device,10.0.3.1,updated-vendor
 new-device,10.0.3.2,new-vendor"""
     
     files = {"file": ("devices.csv", io.BytesIO(csv_content.encode()), "text/csv")}
-    response = await client.post("/api/devices/import", files=files, headers=auth_headers)
+    response = await client.post("/api/devices/import", files=files, headers=admin_headers)
     assert response.status_code == 200
     data = response.json()
     assert data["total_rows"] == 2
@@ -264,14 +278,14 @@ new-device,10.0.3.2,new-vendor"""
 
 
 @pytest.mark.asyncio
-async def test_csv_import_handles_validation_errors(client: AsyncClient, auth_headers: dict[str, str]):
+async def test_csv_import_handles_validation_errors(client: AsyncClient, admin_headers: dict[str, str]):
     csv_content = """hostname,mgmt_ip,vendor
 valid-device,10.0.4.1,cisco
 ,10.0.4.2,juniper
 invalid-device,,palo-alto"""
     
     files = {"file": ("devices.csv", io.BytesIO(csv_content.encode()), "text/csv")}
-    response = await client.post("/api/devices/import", files=files, headers=auth_headers)
+    response = await client.post("/api/devices/import", files=files, headers=admin_headers)
     assert response.status_code == 200
     data = response.json()
     assert data["total_rows"] == 3
@@ -281,11 +295,11 @@ invalid-device,,palo-alto"""
 
 
 @pytest.mark.asyncio
-async def test_csv_import_handles_empty_file(client: AsyncClient, auth_headers: dict[str, str]):
+async def test_csv_import_handles_empty_file(client: AsyncClient, admin_headers: dict[str, str]):
     csv_content = """hostname,mgmt_ip,vendor"""
     
     files = {"file": ("devices.csv", io.BytesIO(csv_content.encode()), "text/csv")}
-    response = await client.post("/api/devices/import", files=files, headers=auth_headers)
+    response = await client.post("/api/devices/import", files=files, headers=admin_headers)
     assert response.status_code == 200
     data = response.json()
     assert data["total_rows"] == 0
@@ -293,13 +307,13 @@ async def test_csv_import_handles_empty_file(client: AsyncClient, auth_headers: 
 
 
 @pytest.mark.asyncio
-async def test_csv_import_reports_duplicate_errors(client: AsyncClient, auth_headers: dict[str, str]):
+async def test_csv_import_reports_duplicate_errors(client: AsyncClient, admin_headers: dict[str, str]):
     csv_content = """hostname,mgmt_ip,vendor
 dup-device,10.0.5.1,cisco
 dup-device,10.0.5.2,juniper"""
     
     files = {"file": ("devices.csv", io.BytesIO(csv_content.encode()), "text/csv")}
-    response = await client.post("/api/devices/import", files=files, headers=auth_headers)
+    response = await client.post("/api/devices/import", files=files, headers=admin_headers)
     assert response.status_code == 200
     data = response.json()
     assert data["total_rows"] == 2
@@ -307,6 +321,17 @@ dup-device,10.0.5.2,juniper"""
     assert data["skipped"] == 1
     assert len(data["errors"]) == 1
     assert "Duplicate" in data["errors"][0]["error"]
+
+
+@pytest.mark.asyncio
+async def test_csv_import_requires_admin(client: AsyncClient, auth_headers: dict[str, str]):
+    csv_content = """hostname,mgmt_ip,vendor
+test,10.0.6.1,cisco"""
+    
+    files = {"file": ("devices.csv", io.BytesIO(csv_content.encode()), "text/csv")}
+    response = await client.post("/api/devices/import", files=files, headers=auth_headers)
+    assert response.status_code == 403
+    assert "Admin access required" in response.json()["detail"]
 
 
 @pytest.mark.asyncio
