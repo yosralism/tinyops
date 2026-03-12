@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 
 from app.core.config import get_settings
-from app.api.routes import devices, auth
+from app.api.routes import devices, auth, jobs
 
 settings = get_settings()
 
@@ -20,3 +20,4 @@ async def health_check():
 
 app.include_router(devices.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")
+app.include_router(jobs.router, prefix="/api")

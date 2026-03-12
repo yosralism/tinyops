@@ -18,6 +18,20 @@ class Settings(BaseSettings):
     jwt_secret_key: str
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 30
+    
+    # Celery configuration
+    celery_broker_url: str | None = None
+    celery_result_backend: str | None = None
+    
+    @property
+    def celery_broker(self) -> str:
+        """Get Celery broker URL, defaulting to redis_url."""
+        return self.celery_broker_url or self.redis_url.replace("/0", "/0")
+    
+    @property
+    def celery_backend(self) -> str:
+        """Get Celery result backend URL, defaulting to redis_url with db 1."""
+        return self.celery_result_backend or self.redis_url.replace("/0", "/1")
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
