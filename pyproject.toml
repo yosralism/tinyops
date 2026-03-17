@@ -30,6 +30,7 @@ dependencies = [
   "ttp",
   "boto3",
   "python-dotenv",
+  "psutil>=5.9.0",
 ]
 
 [project.optional-dependencies]

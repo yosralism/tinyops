@@ -23,6 +23,14 @@ class Settings(BaseSettings):
     celery_broker_url: str | None = None
     celery_result_backend: str | None = None
     
+    # EEP (Execution Environment Protection) configuration
+    eep_max_execution_time: int = 600  # 10 minutes default
+    eep_memory_limit_mb: int = 256
+    eep_cpu_limit: float = 1.0
+    eep_enable_network: bool = True
+    eep_temp_dir: str = "/tmp/eep"
+    eep_kill_timeout: int = 10
+    
     @property
     def celery_broker(self) -> str:
         """Get Celery broker URL, defaulting to redis_url."""
