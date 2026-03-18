@@ -61,12 +61,30 @@ def _subprocess_wrapper(
         result = target_func(*args, **kwargs)
         execution_time = time.time() - start_time
         
+        # Check result size and log warning if large
+        try:
+            result_size = sys.getsizeof(result)
+            if result_size > 10 * 1024 * 1024:  # 10MB
+                logger.warning(f"Large result detected: {result_size / (1024*1024):.1f}MB")
+        except Exception as size_error:
+            logger.debug(f"Could not determine result size: {size_error}")
+        
         # Send success result
-        result_queue.put({
-            "status": ExecutionStatus.SUCCESS,
-            "data": result,
-            "execution_time": execution_time,
-        })
+        try:
+            result_queue.put({
+                "status": ExecutionStatus.SUCCESS,
+                "data": result,
+                "execution_time": execution_time,
+            })
+            logger.debug("Result successfully put into queue")
+        except Exception as queue_error:
+            logger.error(f"Failed to put result in queue: {queue_error}")
+            # Try to send error instead
+            result_queue.put({
+                "status": ExecutionStatus.FAILED,
+                "error": f"Failed to serialize result: {queue_error}",
+                "exception_type": "SerializationError",
+            })
         
     except MemoryError as e:
         # Memory limit exceeded
@@ -213,9 +231,14 @@ class IsolatedExecutor:
                 )
                 return self._handle_timeout(execution_time, target_func.__name__)
             
-            # Process finished, get result
-            if not self._result_queue.empty():
-                result_data = self._result_queue.get(timeout=1)
+            # Process finished, try to get result
+            # Don't rely on queue.empty() as it's unreliable with multiprocessing
+            try:
+                logger.debug("Waiting for result from subprocess queue...")
+                # Use longer timeout for large results (e.g., show run output)
+                # Large outputs can take time to pickle/unpickle across queue
+                result_data = self._result_queue.get(timeout=30)
+                logger.info("Result retrieved successfully from subprocess")
                 result = self._build_result(result_data, execution_time, metrics)
                 
                 # Log execution complete
@@ -229,30 +252,37 @@ class IsolatedExecutor:
                 )
                 
                 return result
-            
-            # Process finished but no result (crashed?)
-            exit_code = self._process.exitcode
-            if exit_code != 0:
+                
+            except Exception as queue_error:
+                # Failed to get result from queue
+                logger.error(f"Failed to retrieve result from queue: {queue_error}")
+                logger.error(f"Queue error type: {type(queue_error).__name__}")
+                
+                # Check if process crashed
+                exit_code = self._process.exitcode
+                if exit_code != 0:
+                    logger.error(
+                        f"Process crashed: exit_code={exit_code}, "
+                        f"func={target_func.__name__}"
+                    )
+                    return ExecutionResult(
+                        status=ExecutionStatus.CRASHED,
+                        error=f"Process crashed with exit code {exit_code}. Queue error: {queue_error}",
+                        exit_code=exit_code,
+                        execution_time=execution_time,
+                    )
+                
+                # Process completed but result retrieval failed
                 logger.error(
-                    f"Process crashed: exit_code={exit_code}, "
-                    f"func={target_func.__name__}"
+                    f"Process completed (exit_code=0) but failed to retrieve result. "
+                    f"This usually indicates the result was too large to serialize. "
+                    f"Queue error: {queue_error}"
                 )
                 return ExecutionResult(
-                    status=ExecutionStatus.CRASHED,
-                    error=f"Process crashed with exit code {exit_code}",
-                    exit_code=exit_code,
+                    status=ExecutionStatus.FAILED,
+                    error=f"Result retrieval failed (likely too large): {queue_error}",
                     execution_time=execution_time,
                 )
-            
-            # Should not reach here
-            logger.warning(
-                f"No result received from subprocess: func={target_func.__name__}"
-            )
-            return ExecutionResult(
-                status=ExecutionStatus.FAILED,
-                error="No result received from subprocess",
-                execution_time=execution_time,
-            )
         
         except Exception as e:
             log_exception(logger, f"isolated execution of {target_func.__name__}", e)

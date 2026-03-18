@@ -7,8 +7,9 @@ from sqlalchemy import select, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.schemas.devices import DeviceCreate, DeviceRead, DeviceUpdate, DeviceImportResult
-from app.storage.db import get_db_session
-from app.storage.models import Device, User
+from app.db.session import get_db_session
+from app.models.device import Device
+from app.models.user import User
 from app.api.routes.auth import get_current_active_user, require_admin
 
 router = APIRouter(tags=["devices"])

@@ -31,6 +31,14 @@ class Settings(BaseSettings):
     eep_temp_dir: str = "/tmp/eep"
     eep_kill_timeout: int = 10
     
+    # Device credential configuration
+    device_username: str | None = None
+    device_password: str | None = None
+    device_enable_secret: str | None = None
+    device_ssh_key_file: str | None = None
+    device_default_timeout: int = 30
+    device_default_port: int = 22
+    
     @property
     def celery_broker(self) -> str:
         """Get Celery broker URL, defaulting to redis_url."""

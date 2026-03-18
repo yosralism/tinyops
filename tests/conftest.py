@@ -6,10 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool
 
 from app.api.main import app
-from app.storage.base import Base
-from app.storage.db import get_db_session
-
-from app.storage import models
+from app.db.base import Base
+from app.db.session import get_db_session
+from app import models
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
