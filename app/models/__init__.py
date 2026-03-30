@@ -6,6 +6,7 @@ from app.models.device_fact import DeviceFact
 from app.models.import_history import DeviceImportHistory
 from app.models.connection_profile import ConnectionProfile
 from app.models.credential_ref import CredentialReference
+from app.models.command_profile import CommandProfile
 
 __all__ = [
     "Device",
@@ -15,4 +16,5 @@ __all__ = [
     "DeviceImportHistory",
     "ConnectionProfile",
     "CredentialReference",
+    "CommandProfile",
 ]

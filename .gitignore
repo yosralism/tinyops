@@ -38,3 +38,13 @@ alembic/__pycache__/
 
 # Docker
 *.tar
+*.csv
+*.md
+docs/
+.cursor/
+.gitignore
+*.xlsx
+docker-compose.override.yml
+.env.example
+collection_logs/
+.gitignore

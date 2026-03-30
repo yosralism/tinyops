@@ -141,6 +141,47 @@ def load_commands(filepath: str) -> dict[str, str]:
     return commands
 
 
+def load_profiles(profile_names: str, commands_dir: Path = None) -> dict[str, str]:
+    """
+    Load commands from one or more profile files and merge them.
+    
+    Args:
+        profile_names: Comma-separated profile names (e.g., "healthcheck,security_audit")
+        commands_dir: Directory containing profile files (default: project_root/commands)
+    
+    Returns:
+        Merged dictionary of commands with duplicates removed
+    """
+    if commands_dir is None:
+        commands_dir = project_root / "commands"
+    
+    all_commands = {}
+    profiles = [p.strip() for p in profile_names.split(",")]
+    
+    print(f"\nLoading command profiles:")
+    for profile_name in profiles:
+        profile_file = commands_dir / f"{profile_name}.txt"
+        
+        if not profile_file.exists():
+            print(f"  ✗ Profile not found: {profile_name}")
+            print(f"    Expected: {profile_file}")
+            sys.exit(1)
+        
+        # Load commands from profile
+        profile_commands = load_commands(str(profile_file))
+        
+        # Track duplicates for reporting
+        duplicates = set(profile_commands.keys()) & set(all_commands.keys())
+        new_commands = len(profile_commands) - len(duplicates)
+        
+        all_commands.update(profile_commands)
+        
+        print(f"  ✓ {profile_name}: {len(profile_commands)} commands ({new_commands} new, {len(duplicates)} duplicate)")
+    
+    print(f"\nTotal unique commands: {len(all_commands)}")
+    return all_commands
+
+
 class BulkCollector:
     """Manages bulk device collection."""
     
@@ -626,17 +667,20 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Default: 10 concurrent tasks, all supported roles
+  # Default: 10 concurrent tasks, healthcheck profile, all supported roles
   python scripts/bulk_collect.py
   
-  # Custom concurrency
-  python scripts/bulk_collect.py --concurrency 20
+  # Custom concurrency and profile
+  python scripts/bulk_collect.py --concurrency 20 --profile security_audit
   
   # Specific roles only
-  python scripts/bulk_collect.py --roles EN,AN,CN
+  python scripts/bulk_collect.py --roles EN,AN,CN --profile healthcheck
+  
+  # Multiple profiles (merged commands)
+  python scripts/bulk_collect.py --profile healthcheck,security_audit
   
   # High concurrency for large deployments
-  python scripts/bulk_collect.py --concurrency 50 --roles EN,AN,CN,IGW,RR,P
+  python scripts/bulk_collect.py --concurrency 50 --profile capacity_planning
         """
     )
     
@@ -662,10 +706,17 @@ Examples:
     )
     
     parser.add_argument(
+        "--profile",
+        type=str,
+        default="healthcheck",
+        help="Command profile(s) to use (comma-separated for multiple). Default: healthcheck"
+    )
+    
+    parser.add_argument(
         "--commands",
         type=str,
-        default=str(project_root / "commands.txt"),
-        help="Path to commands file (default: commands.txt)"
+        default=None,
+        help="Path to custom commands file (overrides --profile if specified)"
     )
     
     args = parser.parse_args()
@@ -689,17 +740,25 @@ Examples:
             print("Cancelled.")
             sys.exit(0)
     
-    # Load commands from file
+    # Load commands - either from custom file or profile(s)
     try:
-        commands = load_commands(args.commands)
-        if not commands:
-            print(f"Error: No commands found in {args.commands}")
-            sys.exit(1)
-        print(f"\nLoaded {len(commands)} command(s) from {args.commands}")
-        for key, cmd in commands.items():
-            print(f"  - {cmd}")
-    except FileNotFoundError:
-        print(f"Error: Commands file not found: {args.commands}")
+        if args.commands:
+            # Custom commands file specified
+            commands = load_commands(args.commands)
+            if not commands:
+                print(f"Error: No commands found in {args.commands}")
+                sys.exit(1)
+            print(f"\nLoaded {len(commands)} command(s) from {args.commands}")
+            for key, cmd in commands.items():
+                print(f"  - {cmd}")
+        else:
+            # Load from profile(s)
+            commands = load_profiles(args.profile)
+            if not commands:
+                print(f"Error: No commands found in profile(s): {args.profile}")
+                sys.exit(1)
+    except FileNotFoundError as e:
+        print(f"Error: File not found: {e}")
         sys.exit(1)
     except Exception as e:
         print(f"Error loading commands: {e}")
