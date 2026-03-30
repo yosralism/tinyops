@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import logging
+import os
 from datetime import datetime
 from multiprocessing import Queue
 from typing import Any
 
+from dotenv import load_dotenv
+
 from workers.celery_app import celery_app
 from workers.eep import EEPConfig, ExecutionStatus, IsolatedExecutor
-from collector import SSHCollector
+from collector.ssh import SSHCollector
+from collector.multi_hop_ssh import MultiHopSSHCollector
 from collector.credentials import CredentialManager, DeviceCredentials
 from collector.exceptions import (
     CollectorError,
@@ -18,6 +22,11 @@ from collector.exceptions import (
     CommandExecutionError,
     TimeoutError as CollectorTimeoutError,
 )
+from app.services.connection_profile_service import ConnectionProfileService
+from app.db.session import sync_session_maker
+
+# Load environment variables
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -45,8 +54,9 @@ def _device_collection_logic(
         device_type: Device platform type (cisco_ios, juniper_junos, cisco_iosxr, etc.)
         commands: List of commands to execute
         progress_queue: Queue for reporting progress to parent process
-        ssh_config_file: Path to SSH config file for ProxyJump support
+        ssh_config_file: Path to SSH config file for ProxyJump support (legacy)
         session_log: Path to save SSH session log (optional)
+        use_connection_profile: Whether to use connection profile system (default: True)
     
     Returns:
         Dictionary with collection results
@@ -66,32 +76,82 @@ def _device_collection_logic(
     })
     
     try:
-        # Get credentials for device
+        # Get device from database to determine role (for credential selection)
+        device_role = None
+        try:
+            with sync_session_maker() as session:
+                from app.models.device import Device
+                device = session.get(Device, device_id)
+                if device:
+                    device_role = device.role
+        except Exception as e:
+            logger.warning(f"Failed to get device role from database: {e}")
+        
+        # Get credentials for device (uses role for IGW/RR/P)
         credentials = CredentialManager.get_credentials_for_device(
             device_id=device_id,
-            hostname=hostname
+            hostname=hostname,
+            role=device_role,
         )
         
-        # Report connecting progress
-        progress_queue.put({
-            "state": "PROGRESS",
-            "meta": {
-                "device_id": device_id,
-                "hostname": hostname,
-                "status": f"Connecting to {mgmt_ip}...",
-                "progress": 10,
-            },
-        })
+        # Try to use connection profile
+        collector = None
+        try:
+            # Use synchronous session in subprocess
+            with sync_session_maker() as session:
+                service = ConnectionProfileService(session)
+                resolved = service.resolve_connection_for_device(device_id)
+            
+            if resolved:
+                logger.info(f"Using connection profile '{resolved.profile_name}' for {hostname} ({len(resolved.hops)} hops)")
+                
+                # Report connecting via profile
+                progress_queue.put({
+                    "state": "PROGRESS",
+                    "meta": {
+                        "device_id": device_id,
+                        "hostname": hostname,
+                        "status": f"Connecting via {resolved.profile_name} ({len(resolved.hops)} hops)...",
+                        "progress": 10,
+                    },
+                })
+                
+                # Use MultiHopSSHCollector
+                collector = MultiHopSSHCollector(
+                    resolved_connection=resolved,
+                    target_device_type=device_type,
+                    target_credentials=credentials,
+                    session_log=session_log,
+                    conn_timeout=60,
+                )
+            else:
+                logger.info(f"No connection profile found for {hostname}, using direct connection")
         
-        # Initialize SSH collector (ssh_config_file comes from function parameter)
-        collector = SSHCollector(
-            hostname=mgmt_ip,
-            device_type=device_type,
-            credentials=credentials,
-            timeout=30,
-            ssh_config_file=ssh_config_file,  # Use parameter directly
-            session_log=session_log,  # Enable session logging
-        )
+        except Exception as e:
+            logger.warning(f"Failed to resolve connection profile for {hostname}: {e}, falling back to direct")
+            import traceback
+            logger.debug(traceback.format_exc())
+        
+        # Fallback to direct connection
+        if collector is None:
+            progress_queue.put({
+                "state": "PROGRESS",
+                "meta": {
+                    "device_id": device_id,
+                    "hostname": hostname,
+                    "status": f"Connecting directly to {mgmt_ip}...",
+                    "progress": 10,
+                },
+            })
+            
+            collector = SSHCollector(
+                hostname=mgmt_ip,
+                device_type=device_type,
+                credentials=credentials,
+                timeout=60,
+                ssh_config_file=ssh_config_file,
+                session_log=session_log,
+            )
         
         # Connect to device
         collector.connect()
@@ -112,8 +172,9 @@ def _device_collection_logic(
         errors = {}
         total_commands = len(commands)
         
-        # Track large outputs to avoid queue issues
-        large_output_threshold = 50000  # 50KB
+        # Setup output directories for direct file writing
+        from pathlib import Path
+        collection_logs_base = Path("collection_logs")
         
         for idx, command in enumerate(commands, 1):
             progress_queue.put({
@@ -132,33 +193,39 @@ def _device_collection_logic(
                 output_size = len(output)
                 logger.info(f"[{hostname}] Command '{command}' succeeded, output length: {output_size} bytes")
                 
-                # For large outputs, truncate in result to avoid queue serialization issues
-                if output_size > large_output_threshold:
-                    logger.warning(
-                        f"[{hostname}] Large output detected ({output_size} bytes). "
-                        f"Truncating in result, full output available in session log."
-                    )
-                    truncated_output = (
-                        f"[OUTPUT TRUNCATED - {output_size} bytes total]\n"
-                        f"First 5000 chars:\n{output[:5000]}\n...\n"
-                        f"Last 1000 chars:\n{output[-1000:]}\n"
-                        f"[Full output available in session log]"
-                    )
+                # Save output directly to file (skip terminal length 0 - it's just setup)
+                if command != "terminal length 0":
+                    # Generate command key (same as bulk_collect.py does)
+                    command_key = command.lower().replace(" ", "_")
+                    
+                    # Create output directory
+                    output_dir = collection_logs_base / command_key
+                    output_dir.mkdir(parents=True, exist_ok=True)
+                    
+                    # Write output to file
+                    output_file = output_dir / f"{hostname}_{mgmt_ip}.txt"
+                    with open(output_file, 'w') as f:
+                        f.write(output)
+                    
+                    logger.info(f"[{hostname}] Saved {command} output to {output_file}")
+                    
+                    # Return only metadata to queue (no large output!)
                     results[command] = {
                         "success": True,
-                        "output": truncated_output,
                         "output_size_bytes": output_size,
-                        "truncated": True,
+                        "output_file": str(output_file),
+                        "saved_to_disk": True,
                         "timestamp": datetime.utcnow().isoformat(),
                     }
                 else:
+                    # Terminal length 0 - just mark as success, no file needed
                     results[command] = {
                         "success": True,
-                        "output": output,
                         "output_size_bytes": output_size,
-                        "truncated": False,
+                        "saved_to_disk": False,
                         "timestamp": datetime.utcnow().isoformat(),
                     }
+                    
             except (CommandExecutionError, CollectorTimeoutError) as e:
                 error_msg = str(e)
                 logger.error(f"[{hostname}] Command '{command}' FAILED: {error_msg}")
@@ -244,7 +311,7 @@ def collect_device_data(
     device_id: int,
     hostname: str,
     mgmt_ip: str,
-    device_type: str = "cisco_iosxr",
+    device_type: str = "cisco_xr",
     commands: list[str] | None = None,
     ssh_config_file: str | None = None,
     session_log: str | None = None,

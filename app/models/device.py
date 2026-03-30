@@ -39,3 +39,6 @@ class Device(Base):
     facts: Mapped[list["DeviceFact"]] = relationship(
         "DeviceFact", back_populates="device", cascade="all, delete-orphan"
     )
+    connection_profile: Mapped["ConnectionProfile"] = relationship(
+        "ConnectionProfile", back_populates="device", uselist=False
+    )

@@ -73,23 +73,50 @@ class CredentialManager:
     def get_credentials_for_device(
         device_id: int,
         hostname: str,
+        role: str | None = None,
     ) -> DeviceCredentials:
         """Get credentials for a specific device.
         
         Args:
             device_id: Database ID of the device
             hostname: Device hostname
+            role: Device role (IGW, RR, P use core credentials)
             
         Returns:
             DeviceCredentials for the device
             
         Note:
-            Currently returns default credentials.
-            Future: Query database for per-device credentials.
+            IGW, RR, and P devices use DEVICE_CORE_USERNAME/PASSWORD.
+            Other devices use DEVICE_USERNAME/PASSWORD.
         """
-        # TODO: Query database for per-device credentials
-        # For now, return default credentials
-        return CredentialManager.get_default_credentials()
+        # Core devices use different credentials
+        core_roles = ["IGW", "RR", "P"]
+        
+        if role and role.upper() in core_roles:
+            # Use core device credentials
+            username = os.getenv("DEVICE_CORE_USERNAME")
+            password = os.getenv("DEVICE_CORE_PASSWORD")
+            secret = os.getenv("DEVICE_ENABLE_SECRET")  # Same for all
+            ssh_key = os.getenv("DEVICE_SSH_KEY_FILE")  # Same for all
+            
+            if not username:
+                raise ValueError("DEVICE_CORE_USERNAME environment variable is required for core devices")
+            
+            if not password and not ssh_key:
+                raise ValueError(
+                    "Either DEVICE_CORE_PASSWORD or DEVICE_SSH_KEY_FILE "
+                    "environment variable is required for core devices"
+                )
+            
+            return DeviceCredentials(
+                username=username,
+                password=password,
+                secret=secret,
+                ssh_key_file=ssh_key,
+            )
+        else:
+            # Use standard device credentials
+            return CredentialManager.get_default_credentials()
     
     @staticmethod
     def validate_credentials(credentials: DeviceCredentials) -> bool:
