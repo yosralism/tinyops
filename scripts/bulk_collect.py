@@ -185,11 +185,12 @@ def load_profiles(profile_names: str, commands_dir: Path = None) -> dict[str, st
 class BulkCollector:
     """Manages bulk device collection."""
     
-    def __init__(self, concurrency: int = 10, roles: list[str] = None, limit: int = None, commands: dict[str, str] = None):
+    def __init__(self, concurrency: int = 10, roles: list[str] = None, limit: int = None, commands: dict[str, str] = None, platform: str = None):
         self.concurrency = concurrency
         self.roles = roles or DEFAULT_ROLES
         self.limit = limit
         self.commands = commands or {}
+        self.platform = platform  # Platform filter (substring match)
         
         # Output directories (dynamic based on commands)
         self.base_dir = project_root / "collection_logs"
@@ -231,6 +232,11 @@ class BulkCollector:
         
         async with SessionLocal() as session:
             stmt = select(Device).where(Device.role.in_(self.roles))
+            
+            # Apply platform filter if specified
+            if self.platform:
+                stmt = stmt.where(Device.platform.contains(self.platform))
+                print(f"  Platform filter: {self.platform}")
             
             # Apply limit if specified
             if self.limit:
@@ -451,7 +457,7 @@ class BulkCollector:
         # Initialize device queue
         device_queue = iter(devices)
         active_tasks = {}
-        completed_count = 0
+        success_count = 0
         failed_count = 0
         
         print(f"\n🚀 Filling initial pool ({self.concurrency} workers)...\n")
@@ -489,7 +495,6 @@ class BulkCollector:
                 # Check if task is done
                 if result.ready():
                     completed_task_ids.append(task_id)
-                    completed_count += 1
                     
                     try:
                         if result.successful():
@@ -502,6 +507,7 @@ class BulkCollector:
                                     if cmd_result.get("success"):
                                         self.save_command_output(device, cmd_key, cmd_result)
                             
+                            success_count += 1
                             self.metrics["successful_devices"] += 1
                             print(f"  ✓ {device['hostname']} ({device['mgmt_ip']}) - {elapsed:.1f}s")
                         else:
@@ -569,10 +575,11 @@ class BulkCollector:
             # Print progress periodically
             current_time = time.time()
             if current_time - last_progress_time >= progress_interval:
-                total_processed = completed_count + failed_count
+                total_processed = success_count + failed_count
                 remaining = self.metrics["total_devices"] - total_processed
                 print(f"\n📊 Progress: {total_processed}/{self.metrics['total_devices']} complete "
-                      f"({remaining} remaining, {len(active_tasks)} active)\n")
+                      f"({success_count} ok, {failed_count} failed, "
+                      f"{remaining} remaining, {len(active_tasks)} active)\n")
                 last_progress_time = current_time
             
             # Small sleep to avoid busy-waiting
@@ -580,8 +587,9 @@ class BulkCollector:
         
         print(f"\n{'='*60}")
         print(f"✓ All devices processed!")
-        print(f"  Successful: {completed_count - failed_count}")
+        print(f"  Successful: {success_count}")
         print(f"  Failed: {failed_count}")
+        print(f"  Total: {success_count + failed_count}")
         print(f"{'='*60}\n")
     
     async def run(self):
@@ -719,6 +727,13 @@ Examples:
         help="Path to custom commands file (overrides --profile if specified)"
     )
     
+    parser.add_argument(
+        "--platform",
+        type=str,
+        default=None,
+        help="Filter devices by platform (substring match, e.g., 'NCS 540', 'ASR 9')"
+    )
+    
     args = parser.parse_args()
     
     # Parse roles
@@ -769,7 +784,8 @@ Examples:
         concurrency=args.concurrency,
         roles=roles,
         limit=args.limit,
-        commands=commands
+        commands=commands,
+        platform=args.platform
     )
     
     try:

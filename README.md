@@ -13,7 +13,8 @@ An on-prem, Python Network Management System for large ISPs. Tinyops focuses on 
 1. Clone the repo.
 2. Create and activate a virtual environment.
 3. Install dependencies (see Development Setup).
-4. Review `/docs` for architecture details and `/infra` for deployment assets.
+4. Review [`docs/ARCHITECTURE_AND_ROADMAP.md`](docs/ARCHITECTURE_AND_ROADMAP.md) for architecture, stack, and development roadmap.
+5. Check `/infra` for deployment assets.
 
 ## Development Setup
 
